@@ -1,3 +1,8 @@
+# Run with [VCU_RVI_Benchmark](https://github.com/rising-turtle/VCU_RVI_Benchmark)
+In folder *ov_msckf/launch* 
+
+run ```roslaunch pgeneva_rvi.launch```   
+Notice, change the bag file path accordingly. 
 
 
 # Open VINS
