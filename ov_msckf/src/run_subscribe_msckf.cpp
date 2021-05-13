@@ -46,6 +46,7 @@ RosVisualizer* viz;
 // Buffer data
 double time_buffer = -1;
 cv::Mat img0_buffer, img1_buffer;
+double magnify_g = 1.;
 
 // Callback functions
 void callback_inertial(const sensor_msgs::Imu::ConstPtr& msg);
@@ -77,6 +78,8 @@ int main(int argc, char** argv) {
     nh.param<std::string>("topic_imu", topic_imu, "/imu0");
     nh.param<std::string>("topic_camera0", topic_camera0, "/cam0/image_raw");
     nh.param<std::string>("topic_camera1", topic_camera1, "/cam1/image_raw");
+
+    nh.param("magnify_g_norm", magnify_g, magnify_g); 
 
     // Read in what mode we should be processing in (1=mono, 2=stereo)
     int max_cameras;
@@ -134,7 +137,7 @@ void callback_inertial(const sensor_msgs::Imu::ConstPtr& msg) {
     double timem = msg->header.stamp.toSec();
     Eigen::Vector3d wm, am;
     wm << msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z;
-    am << msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z;
+    am << msg->linear_acceleration.x*magnify_g, msg->linear_acceleration.y*magnify_g, msg->linear_acceleration.z*magnify_g;
 
     // send it to our VIO system
     sys->feed_measurement_imu(timem, wm, am);
@@ -148,17 +151,48 @@ void callback_monocular(const sensor_msgs::ImageConstPtr& msg0) {
 
     // Get the image
     cv_bridge::CvImageConstPtr cv_ptr;
-    try {
+    /*try {
         cv_ptr = cv_bridge::toCvShare(msg0, sensor_msgs::image_encodings::MONO8);
     } catch (cv_bridge::Exception &e) {
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return;
+    }*/
+
+
+    cv::Mat ret_img;
+    if (msg0->encoding == "8UC1")
+    {
+        sensor_msgs::Image img;
+        img.header = msg0->header;
+        img.height = msg0->height;
+        img.width = msg0->width;
+        img.is_bigendian = msg0->is_bigendian;
+        img.step = msg0->step;
+        img.data = msg0->data;
+        img.encoding = "mono8";
+        cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
+        ret_img = cv_ptr->image.clone();
+    }else if(msg0->encoding == "8UC3"){
+        sensor_msgs::Image img;
+        img.header = msg0->header;
+        img.height = msg0->height;
+        img.width = msg0->width;
+        img.is_bigendian = msg0->is_bigendian;
+        img.step = msg0->step;
+        img.data = msg0->data;
+        img.encoding = "bgr8";
+        cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
+        ret_img = cv_ptr->image.clone();
+        cv::cvtColor(ret_img, ret_img, cv::COLOR_BGR2GRAY);
+    }else{
+        cv_ptr = cv_bridge::toCvCopy(msg0, sensor_msgs::image_encodings::MONO8);
+        ret_img = cv_ptr->image.clone();
     }
 
     // Fill our buffer if we have not
     if(img0_buffer.rows == 0) {
         time_buffer = cv_ptr->header.stamp.toSec();
-        img0_buffer = cv_ptr->image.clone();
+        img0_buffer = ret_img; // cv_ptr->image.clone();
         return;
     }
 
@@ -168,7 +202,7 @@ void callback_monocular(const sensor_msgs::ImageConstPtr& msg0) {
 
     // move buffer forward
     time_buffer = cv_ptr->header.stamp.toSec();
-    img0_buffer = cv_ptr->image.clone();
+    img0_buffer = ret_img; // cv_ptr->image.clone();
 
 }
 
